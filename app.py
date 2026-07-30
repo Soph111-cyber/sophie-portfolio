@@ -1,3 +1,4 @@
+import html
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -5,6 +6,9 @@ from urllib.parse import unquote, urlparse
 
 import streamlit as st
 from supabase import Client, create_client
+
+SIZE_OPTIONS = ["Small", "Medium", "Large", "Full width"]
+SIZE_SPANS = {"Small": 1, "Medium": 2, "Large": 3, "Full width": 5}
 
 st.set_page_config(
     page_title="Sophie's Portfolio",
@@ -22,13 +26,19 @@ st.markdown(
     .hero {padding: 2.4rem 0 1.8rem; border-bottom: 1px solid rgba(60,50,40,.18); margin-bottom: 2rem;}
     .eyebrow {letter-spacing: .18em; text-transform: uppercase; font-size: .78rem; color: #7d6b57;}
     .subtitle {font-size: 1.08rem; color: #5d554d; max-width: 720px; line-height: 1.7;}
-    .card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 18px; padding: .85rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(70,50,30,.05);}
+    .portfolio-card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 18px; padding: .85rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(70,50,30,.05);}
+    .media-grid {display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start;}
+    .media-item {min-width: 0; overflow: hidden; border-radius: 10px; background: #eee9e1;}
+    .media-item img, .media-item video {width: 100%; height: 100%; max-height: 430px; object-fit: cover; display: block; border-radius: 10px;}
+    .media-item video {background: #111;}
     .caption {font-size: .96rem; line-height: 1.65; color: #3e3934; margin-top: .65rem;}
     .meta {font-size: .76rem; color: #8a8178; margin-top: .5rem;}
     [data-testid="stSidebar"] {display:none;}
-    [data-testid="stImage"] img {border-radius: 10px; max-height: 300px; object-fit: cover;}
-    video {border-radius: 10px; max-height: 300px; background: #111;}
-    .manage-box {padding: .8rem 0; border-bottom: 1px solid rgba(90,70,50,.13);}
+    .manage-box {padding: .9rem 0; border-bottom: 1px solid rgba(90,70,50,.13);}
+    @media (max-width: 760px) {
+      .media-grid {grid-template-columns: repeat(2, minmax(0, 1fr));}
+      .media-item {grid-column: span 1 !important;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -60,10 +70,17 @@ def check_password(password: str) -> bool:
     return bool(expected) and password == expected
 
 
+def normalize_sizes(sizes: list[str], count: int) -> list[str]:
+    normalized = [size if size in SIZE_OPTIONS else "Small" for size in sizes[:count]]
+    normalized.extend(["Small"] * (count - len(normalized)))
+    return normalized
+
+
 def load_entries(client: Client) -> list[dict[str, Any]]:
     result = (
         client.table("portfolio_entries")
-        .select("id,description,media_urls,media_types,created_at")
+        .select("id,description,media_urls,media_types,media_sizes,display_order,created_at")
+        .order("display_order", desc=False)
         .order("created_at", desc=True)
         .execute()
     )
@@ -94,65 +111,76 @@ def storage_path_from_url(url: str) -> str | None:
     return unquote(parsed_path.split(marker, 1)[1])
 
 
-def render_media(url: str, media_type: str) -> None:
-    if media_type.startswith("video/"):
-        st.video(url)
-    else:
-        st.image(url, use_container_width=True)
-
-
 def render_gallery(entries: list[dict[str, Any]]) -> None:
     if not entries:
         st.info("The portfolio gallery is being curated. Please check back soon.")
         return
 
     for entry in entries:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
         urls = entry.get("media_urls") or []
         types = entry.get("media_types") or []
+        sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
 
-        if urls:
-            columns = st.columns(5, gap="small")
-            for idx, url in enumerate(urls):
-                media_type = types[idx] if idx < len(types) else ""
-                with columns[idx % 5]:
-                    render_media(url, media_type)
+        media_html: list[str] = []
+        for idx, url in enumerate(urls):
+            safe_url = html.escape(url, quote=True)
+            media_type = types[idx] if idx < len(types) else ""
+            span = SIZE_SPANS[sizes[idx]]
+            if media_type.startswith("video/"):
+                element = f'<video src="{safe_url}" controls preload="metadata"></video>'
+            else:
+                element = f'<img src="{safe_url}" loading="lazy" alt="Portfolio media">'
+            media_html.append(
+                f'<div class="media-item" style="grid-column: span {span};">{element}</div>'
+            )
 
-        description = entry.get("description", "")
-        if description:
-            st.markdown(f'<div class="caption">{description}</div>', unsafe_allow_html=True)
-        created = str(entry.get("created_at", ""))[:10]
-        if created:
-            st.markdown(f'<div class="meta">Added {created}</div>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        description = html.escape(entry.get("description", ""))
+        created = html.escape(str(entry.get("created_at", ""))[:10])
+        description_html = f'<div class="caption">{description}</div>' if description else ""
+        created_html = f'<div class="meta">Added {created}</div>' if created else ""
+
+        st.markdown(
+            '<div class="portfolio-card">'
+            f'<div class="media-grid">{"".join(media_html)}</div>'
+            f'{description_html}{created_html}'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def move_media(client: Client, entry: dict[str, Any], index: int, direction: int) -> None:
     urls = list(entry.get("media_urls") or [])
     types = list(entry.get("media_types") or [])
+    sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
     target = index + direction
     if target < 0 or target >= len(urls):
         return
 
     while len(types) < len(urls):
         types.append("")
-    urls[index], urls[target] = urls[target], urls[index]
-    types[index], types[target] = types[target], types[index]
+    for values in (urls, types, sizes):
+        values[index], values[target] = values[target], values[index]
 
     client.table("portfolio_entries").update(
-        {"media_urls": urls, "media_types": types}
+        {"media_urls": urls, "media_types": types, "media_sizes": sizes}
     ).eq("id", entry["id"]).execute()
+
+
+def save_media_sizes(client: Client, entry_id: int, sizes: list[str]) -> None:
+    client.table("portfolio_entries").update({"media_sizes": sizes}).eq("id", entry_id).execute()
 
 
 def delete_media(client: Client, entry: dict[str, Any], index: int) -> None:
     urls = list(entry.get("media_urls") or [])
     types = list(entry.get("media_types") or [])
+    sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
     if index < 0 or index >= len(urls):
         return
 
     removed_url = urls.pop(index)
     if index < len(types):
         types.pop(index)
+    sizes.pop(index)
 
     storage_path = storage_path_from_url(removed_url)
     if storage_path:
@@ -163,10 +191,32 @@ def delete_media(client: Client, entry: dict[str, Any], index: int) -> None:
 
     if urls:
         client.table("portfolio_entries").update(
-            {"media_urls": urls, "media_types": types}
+            {"media_urls": urls, "media_types": types, "media_sizes": sizes}
         ).eq("id", entry["id"]).execute()
     else:
         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
+
+
+def move_entry(client: Client, entries: list[dict[str, Any]], index: int, direction: int) -> None:
+    target = index + direction
+    if target < 0 or target >= len(entries):
+        return
+
+    current = entries[index]
+    other = entries[target]
+    current_order = current.get("display_order")
+    other_order = other.get("display_order")
+    if current_order is None:
+        current_order = index + 1
+    if other_order is None:
+        other_order = target + 1
+
+    client.table("portfolio_entries").update(
+        {"display_order": other_order}
+    ).eq("id", current["id"]).execute()
+    client.table("portfolio_entries").update(
+        {"display_order": current_order}
+    ).eq("id", other["id"]).execute()
 
 
 client = get_supabase()
@@ -232,6 +282,10 @@ with admin_tab:
                 try:
                     urls: list[str] = []
                     media_types: list[str] = []
+                    entries_before = load_entries(client)
+                    next_order = max(
+                        [int(e.get("display_order") or 0) for e in entries_before] or [0]
+                    ) + 1
                     with st.spinner("Publishing..."):
                         for file in files:
                             url, media_type = upload_file(client, file)
@@ -242,6 +296,8 @@ with admin_tab:
                                 "description": description.strip(),
                                 "media_urls": urls,
                                 "media_types": media_types,
+                                "media_sizes": ["Small"] * len(urls),
+                                "display_order": next_order,
                             }
                         ).execute()
                     st.success("Published successfully ✦")
@@ -251,23 +307,33 @@ with admin_tab:
 
         st.divider()
         st.subheader("Manage published entries")
-        st.caption("Reorder media with the arrows, delete one item with Remove, or delete the entire entry.")
+        st.caption("Move whole entries, reorder individual media, adjust sizes, or remove content.")
         try:
             entries = load_entries(client)
-            for entry in entries:
+            for entry_index, entry in enumerate(entries):
                 st.markdown('<div class="manage-box">', unsafe_allow_html=True)
-                heading_cols = st.columns([5, 1])
+                heading_cols = st.columns([4, 1, 1, 1])
                 with heading_cols[0]:
                     preview = (entry.get("description") or "Untitled entry").strip()
                     st.markdown(f"**{preview[:120] + ('…' if len(preview) > 120 else '')}**")
                 with heading_cols[1]:
-                    if st.button("Delete entry", key=f"delete_{entry['id']}"):
+                    if st.button("Move up", key=f"entry_up_{entry['id']}", disabled=entry_index == 0, use_container_width=True):
+                        move_entry(client, entries, entry_index, -1)
+                        st.rerun()
+                with heading_cols[2]:
+                    if st.button("Move down", key=f"entry_down_{entry['id']}", disabled=entry_index == len(entries) - 1, use_container_width=True):
+                        move_entry(client, entries, entry_index, 1)
+                        st.rerun()
+                with heading_cols[3]:
+                    if st.button("Delete entry", key=f"delete_{entry['id']}", use_container_width=True):
                         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
-                        st.success("Entry deleted.")
                         st.rerun()
 
                 urls = entry.get("media_urls") or []
                 types = entry.get("media_types") or []
+                sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
+                selected_sizes: list[str] = []
+
                 if urls:
                     media_columns = st.columns(min(5, len(urls)), gap="small")
                     for idx, url in enumerate(urls):
@@ -277,35 +343,30 @@ with admin_tab:
                                 st.video(url)
                             else:
                                 st.image(url, use_container_width=True)
-                            st.caption(f"Position {idx + 1}")
+                            selected_size = st.selectbox(
+                                "Display size",
+                                SIZE_OPTIONS,
+                                index=SIZE_OPTIONS.index(sizes[idx]),
+                                key=f"size_{entry['id']}_{idx}",
+                            )
+                            selected_sizes.append(selected_size)
                             left_button, right_button = st.columns(2)
                             with left_button:
-                                if st.button(
-                                    "←",
-                                    key=f"left_{entry['id']}_{idx}",
-                                    disabled=idx == 0,
-                                    use_container_width=True,
-                                ):
+                                if st.button("←", key=f"left_{entry['id']}_{idx}", disabled=idx == 0, use_container_width=True):
                                     move_media(client, entry, idx, -1)
                                     st.rerun()
                             with right_button:
-                                if st.button(
-                                    "→",
-                                    key=f"right_{entry['id']}_{idx}",
-                                    disabled=idx == len(urls) - 1,
-                                    use_container_width=True,
-                                ):
+                                if st.button("→", key=f"right_{entry['id']}_{idx}", disabled=idx == len(urls) - 1, use_container_width=True):
                                     move_media(client, entry, idx, 1)
                                     st.rerun()
-                            if st.button(
-                                "Remove",
-                                key=f"remove_{entry['id']}_{idx}",
-                                type="secondary",
-                                use_container_width=True,
-                            ):
+                            if st.button("Remove", key=f"remove_{entry['id']}_{idx}", use_container_width=True):
                                 delete_media(client, entry, idx)
-                                st.success("Media removed.")
                                 st.rerun()
+
+                    if st.button("Save media sizes", key=f"save_sizes_{entry['id']}", type="primary"):
+                        save_media_sizes(client, entry["id"], selected_sizes)
+                        st.success("Media sizes saved.")
+                        st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
         except Exception as exc:
             st.error(f"Entries could not be managed: {exc}")
