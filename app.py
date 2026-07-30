@@ -16,15 +16,18 @@ st.markdown(
     """
     <style>
     .stApp {background: linear-gradient(180deg, #fffdf8 0%, #f6f2ea 100%);}
-    .block-container {max-width: 1180px; padding-top: 2.5rem; padding-bottom: 5rem;}
+    .block-container {max-width: 1320px; padding-top: 2.5rem; padding-bottom: 5rem;}
     h1, h2, h3 {font-family: Georgia, 'Times New Roman', serif;}
     .hero {padding: 2.4rem 0 1.8rem; border-bottom: 1px solid rgba(60,50,40,.18); margin-bottom: 2rem;}
     .eyebrow {letter-spacing: .18em; text-transform: uppercase; font-size: .78rem; color: #7d6b57;}
     .subtitle {font-size: 1.08rem; color: #5d554d; max-width: 720px; line-height: 1.7;}
-    .card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 20px; padding: 1.25rem; margin-bottom: 1.2rem; box-shadow: 0 10px 30px rgba(70,50,30,.06);}
-    .caption {font-size: 1rem; line-height: 1.7; color: #3e3934;}
+    .card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 20px; padding: 1rem; margin-bottom: 1.2rem; box-shadow: 0 10px 30px rgba(70,50,30,.06);}
+    .caption {font-size: 1rem; line-height: 1.7; color: #3e3934; margin-top: .7rem;}
     .meta {font-size: .78rem; color: #8a8178; margin-top: .6rem;}
     [data-testid="stSidebar"] {display:none;}
+    [data-testid="stImage"] img {border-radius: 13px; max-height: 420px; object-fit: cover;}
+    video {border-radius: 13px; max-height: 420px; background: #111;}
+    .manage-box {padding: .8rem 0; border-bottom: 1px solid rgba(90,70,50,.13);}
     </style>
     """,
     unsafe_allow_html=True,
@@ -82,6 +85,13 @@ def upload_file(client: Client, uploaded_file: Any) -> tuple[str, str]:
     return public_url, content_type
 
 
+def render_media(url: str, media_type: str) -> None:
+    if media_type.startswith("video/"):
+        st.video(url)
+    else:
+        st.image(url, use_container_width=True)
+
+
 def render_gallery(entries: list[dict[str, Any]]) -> None:
     if not entries:
         st.info("The portfolio gallery is being curated. Please check back soon.")
@@ -91,15 +101,18 @@ def render_gallery(entries: list[dict[str, Any]]) -> None:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         urls = entry.get("media_urls") or []
         types = entry.get("media_types") or []
-        columns = st.columns(2 if len(urls) > 1 else 1, gap="medium")
-        for idx, url in enumerate(urls):
-            media_type = types[idx] if idx < len(types) else ""
-            target = columns[idx % len(columns)]
-            with target:
-                if media_type.startswith("video/"):
-                    st.video(url)
-                else:
-                    st.image(url, use_container_width=True)
+
+        if len(urls) == 1:
+            left, center, right = st.columns([1, 2, 1], gap="small")
+            with center:
+                render_media(urls[0], types[0] if types else "")
+        else:
+            columns = st.columns(3, gap="small")
+            for idx, url in enumerate(urls):
+                media_type = types[idx] if idx < len(types) else ""
+                with columns[idx % 3]:
+                    render_media(url, media_type)
+
         description = entry.get("description", "")
         if description:
             st.markdown(f'<div class="caption">{description}</div>', unsafe_allow_html=True)
@@ -107,6 +120,23 @@ def render_gallery(entries: list[dict[str, Any]]) -> None:
         if created:
             st.markdown(f'<div class="meta">Added {created}</div>', unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+
+
+def move_media(client: Client, entry: dict[str, Any], index: int, direction: int) -> None:
+    urls = list(entry.get("media_urls") or [])
+    types = list(entry.get("media_types") or [])
+    target = index + direction
+    if target < 0 or target >= len(urls):
+        return
+
+    urls[index], urls[target] = urls[target], urls[index]
+    while len(types) < len(urls):
+        types.append("")
+    types[index], types[target] = types[target], types[index]
+
+    client.table("portfolio_entries").update(
+        {"media_urls": urls, "media_types": types}
+    ).eq("id", entry["id"]).execute()
 
 
 client = get_supabase()
@@ -191,17 +221,52 @@ with admin_tab:
 
         st.divider()
         st.subheader("Manage published entries")
+        st.caption("Use the arrow buttons to change the order of photos and videos inside each entry.")
         try:
             entries = load_entries(client)
             for entry in entries:
-                cols = st.columns([5, 1])
-                with cols[0]:
+                st.markdown('<div class="manage-box">', unsafe_allow_html=True)
+                heading_cols = st.columns([5, 1])
+                with heading_cols[0]:
                     preview = (entry.get("description") or "Untitled entry").strip()
-                    st.write(preview[:120] + ("…" if len(preview) > 120 else ""))
-                with cols[1]:
+                    st.markdown(f"**{preview[:120] + ('…' if len(preview) > 120 else '')}**")
+                with heading_cols[1]:
                     if st.button("Delete", key=f"delete_{entry['id']}"):
                         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
                         st.success("Entry deleted.")
                         st.rerun()
+
+                urls = entry.get("media_urls") or []
+                types = entry.get("media_types") or []
+                if urls:
+                    media_columns = st.columns(min(4, len(urls)), gap="small")
+                    for idx, url in enumerate(urls):
+                        with media_columns[idx % len(media_columns)]:
+                            media_type = types[idx] if idx < len(types) else ""
+                            if media_type.startswith("video/"):
+                                st.video(url)
+                            else:
+                                st.image(url, width=150)
+                            st.caption(f"Position {idx + 1}")
+                            left_button, right_button = st.columns(2)
+                            with left_button:
+                                if st.button(
+                                    "←",
+                                    key=f"left_{entry['id']}_{idx}",
+                                    disabled=idx == 0,
+                                    use_container_width=True,
+                                ):
+                                    move_media(client, entry, idx, -1)
+                                    st.rerun()
+                            with right_button:
+                                if st.button(
+                                    "→",
+                                    key=f"right_{entry['id']}_{idx}",
+                                    disabled=idx == len(urls) - 1,
+                                    use_container_width=True,
+                                ):
+                                    move_media(client, entry, idx, 1)
+                                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
         except Exception as exc:
             st.error(f"Entries could not be managed: {exc}")
