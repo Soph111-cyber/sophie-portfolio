@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import streamlit as st
 from supabase import Client, create_client
@@ -16,17 +17,17 @@ st.markdown(
     """
     <style>
     .stApp {background: linear-gradient(180deg, #fffdf8 0%, #f6f2ea 100%);}
-    .block-container {max-width: 1320px; padding-top: 2.5rem; padding-bottom: 5rem;}
+    .block-container {max-width: 1480px; padding-top: 2.5rem; padding-bottom: 5rem;}
     h1, h2, h3 {font-family: Georgia, 'Times New Roman', serif;}
     .hero {padding: 2.4rem 0 1.8rem; border-bottom: 1px solid rgba(60,50,40,.18); margin-bottom: 2rem;}
     .eyebrow {letter-spacing: .18em; text-transform: uppercase; font-size: .78rem; color: #7d6b57;}
     .subtitle {font-size: 1.08rem; color: #5d554d; max-width: 720px; line-height: 1.7;}
-    .card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 20px; padding: 1rem; margin-bottom: 1.2rem; box-shadow: 0 10px 30px rgba(70,50,30,.06);}
-    .caption {font-size: 1rem; line-height: 1.7; color: #3e3934; margin-top: .7rem;}
-    .meta {font-size: .78rem; color: #8a8178; margin-top: .6rem;}
+    .card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 18px; padding: .85rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(70,50,30,.05);}
+    .caption {font-size: .96rem; line-height: 1.65; color: #3e3934; margin-top: .65rem;}
+    .meta {font-size: .76rem; color: #8a8178; margin-top: .5rem;}
     [data-testid="stSidebar"] {display:none;}
-    [data-testid="stImage"] img {border-radius: 13px; max-height: 420px; object-fit: cover;}
-    video {border-radius: 13px; max-height: 420px; background: #111;}
+    [data-testid="stImage"] img {border-radius: 10px; max-height: 300px; object-fit: cover;}
+    video {border-radius: 10px; max-height: 300px; background: #111;}
     .manage-box {padding: .8rem 0; border-bottom: 1px solid rgba(90,70,50,.13);}
     </style>
     """,
@@ -85,6 +86,14 @@ def upload_file(client: Client, uploaded_file: Any) -> tuple[str, str]:
     return public_url, content_type
 
 
+def storage_path_from_url(url: str) -> str | None:
+    marker = "/portfolio-media/"
+    parsed_path = urlparse(url).path
+    if marker not in parsed_path:
+        return None
+    return unquote(parsed_path.split(marker, 1)[1])
+
+
 def render_media(url: str, media_type: str) -> None:
     if media_type.startswith("video/"):
         st.video(url)
@@ -102,15 +111,11 @@ def render_gallery(entries: list[dict[str, Any]]) -> None:
         urls = entry.get("media_urls") or []
         types = entry.get("media_types") or []
 
-        if len(urls) == 1:
-            left, center, right = st.columns([1, 2, 1], gap="small")
-            with center:
-                render_media(urls[0], types[0] if types else "")
-        else:
-            columns = st.columns(3, gap="small")
+        if urls:
+            columns = st.columns(5, gap="small")
             for idx, url in enumerate(urls):
                 media_type = types[idx] if idx < len(types) else ""
-                with columns[idx % 3]:
+                with columns[idx % 5]:
                     render_media(url, media_type)
 
         description = entry.get("description", "")
@@ -129,14 +134,39 @@ def move_media(client: Client, entry: dict[str, Any], index: int, direction: int
     if target < 0 or target >= len(urls):
         return
 
-    urls[index], urls[target] = urls[target], urls[index]
     while len(types) < len(urls):
         types.append("")
+    urls[index], urls[target] = urls[target], urls[index]
     types[index], types[target] = types[target], types[index]
 
     client.table("portfolio_entries").update(
         {"media_urls": urls, "media_types": types}
     ).eq("id", entry["id"]).execute()
+
+
+def delete_media(client: Client, entry: dict[str, Any], index: int) -> None:
+    urls = list(entry.get("media_urls") or [])
+    types = list(entry.get("media_types") or [])
+    if index < 0 or index >= len(urls):
+        return
+
+    removed_url = urls.pop(index)
+    if index < len(types):
+        types.pop(index)
+
+    storage_path = storage_path_from_url(removed_url)
+    if storage_path:
+        try:
+            client.storage.from_("portfolio-media").remove([storage_path])
+        except Exception:
+            pass
+
+    if urls:
+        client.table("portfolio_entries").update(
+            {"media_urls": urls, "media_types": types}
+        ).eq("id", entry["id"]).execute()
+    else:
+        client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
 
 
 client = get_supabase()
@@ -221,7 +251,7 @@ with admin_tab:
 
         st.divider()
         st.subheader("Manage published entries")
-        st.caption("Use the arrow buttons to change the order of photos and videos inside each entry.")
+        st.caption("Reorder media with the arrows, delete one item with Remove, or delete the entire entry.")
         try:
             entries = load_entries(client)
             for entry in entries:
@@ -231,7 +261,7 @@ with admin_tab:
                     preview = (entry.get("description") or "Untitled entry").strip()
                     st.markdown(f"**{preview[:120] + ('…' if len(preview) > 120 else '')}**")
                 with heading_cols[1]:
-                    if st.button("Delete", key=f"delete_{entry['id']}"):
+                    if st.button("Delete entry", key=f"delete_{entry['id']}"):
                         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
                         st.success("Entry deleted.")
                         st.rerun()
@@ -239,14 +269,14 @@ with admin_tab:
                 urls = entry.get("media_urls") or []
                 types = entry.get("media_types") or []
                 if urls:
-                    media_columns = st.columns(min(4, len(urls)), gap="small")
+                    media_columns = st.columns(min(5, len(urls)), gap="small")
                     for idx, url in enumerate(urls):
                         with media_columns[idx % len(media_columns)]:
                             media_type = types[idx] if idx < len(types) else ""
                             if media_type.startswith("video/"):
                                 st.video(url)
                             else:
-                                st.image(url, width=150)
+                                st.image(url, use_container_width=True)
                             st.caption(f"Position {idx + 1}")
                             left_button, right_button = st.columns(2)
                             with left_button:
@@ -267,6 +297,15 @@ with admin_tab:
                                 ):
                                     move_media(client, entry, idx, 1)
                                     st.rerun()
+                            if st.button(
+                                "Remove",
+                                key=f"remove_{entry['id']}_{idx}",
+                                type="secondary",
+                                use_container_width=True,
+                            ):
+                                delete_media(client, entry, idx)
+                                st.success("Media removed.")
+                                st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
         except Exception as exc:
             st.error(f"Entries could not be managed: {exc}")
