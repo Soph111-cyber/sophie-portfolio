@@ -7,8 +7,8 @@ from urllib.parse import unquote, urlparse
 import streamlit as st
 from supabase import Client, create_client
 
-SIZE_OPTIONS = ["Small", "Medium", "Large", "Full width"]
-SIZE_SPANS = {"Small": 1, "Medium": 2, "Large": 3, "Full width": 5}
+MEDIA_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "mp4", "mov", "m4v", "webm"]
+LEGACY_WIDTHS = {"Small": 20, "Medium": 40, "Large": 60, "Full width": 100}
 
 st.set_page_config(
     page_title="Sophie's Portfolio",
@@ -26,18 +26,17 @@ st.markdown(
     .hero {padding: 2.4rem 0 1.8rem; border-bottom: 1px solid rgba(60,50,40,.18); margin-bottom: 2rem;}
     .eyebrow {letter-spacing: .18em; text-transform: uppercase; font-size: .78rem; color: #7d6b57;}
     .subtitle {font-size: 1.08rem; color: #5d554d; max-width: 720px; line-height: 1.7;}
-    .portfolio-card {background: rgba(255,255,255,.8); border: 1px solid rgba(90,70,50,.13); border-radius: 18px; padding: .85rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(70,50,30,.05);}
-    .media-grid {display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start;}
-    .media-item {min-width: 0; overflow: hidden; border-radius: 10px; background: #eee9e1;}
-    .media-item img, .media-item video {width: 100%; height: 100%; max-height: 430px; object-fit: cover; display: block; border-radius: 10px;}
-    .media-item video {background: #111;}
-    .caption {font-size: .96rem; line-height: 1.65; color: #3e3934; margin-top: .65rem;}
-    .meta {font-size: .76rem; color: #8a8178; margin-top: .5rem;}
+    .portfolio-card {background: rgba(255,255,255,.82); border: 1px solid rgba(90,70,50,.13); border-radius: 18px; padding: .9rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(70,50,30,.05);}
+    .media-flex {display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;}
+    .media-item {overflow:hidden; border-radius:10px; background:#eee9e1; min-width:0;}
+    .media-item img, .media-item video {width:100%; height:auto; max-height:520px; object-fit:contain; display:block; border-radius:10px;}
+    .media-item video {background:#111;}
+    .caption {font-size:.96rem; line-height:1.65; color:#3e3934; margin-top:.7rem;}
+    .meta {font-size:.76rem; color:#8a8178; margin-top:.5rem;}
     [data-testid="stSidebar"] {display:none;}
-    .manage-box {padding: .9rem 0; border-bottom: 1px solid rgba(90,70,50,.13);}
-    @media (max-width: 760px) {
-      .media-grid {grid-template-columns: repeat(2, minmax(0, 1fr));}
-      .media-item {grid-column: span 1 !important;}
+    .manage-box {padding:1rem 0; border-bottom:1px solid rgba(90,70,50,.13);}
+    @media (max-width:760px) {
+      .media-item {width:100% !important;}
     }
     </style>
     """,
@@ -70,45 +69,60 @@ def check_password(password: str) -> bool:
     return bool(expected) and password == expected
 
 
-def normalize_sizes(sizes: list[str], count: int) -> list[str]:
-    normalized = [size if size in SIZE_OPTIONS else "Small" for size in sizes[:count]]
-    normalized.extend(["Small"] * (count - len(normalized)))
-    return normalized
+def normalize_widths(raw_values: list[Any], count: int) -> list[int]:
+    widths: list[int] = []
+    for value in list(raw_values)[:count]:
+        if isinstance(value, str) and value in LEGACY_WIDTHS:
+            widths.append(LEGACY_WIDTHS[value])
+            continue
+        try:
+            width = int(value)
+        except (TypeError, ValueError):
+            width = 20
+        widths.append(max(15, min(100, width)))
+    widths.extend([20] * (count - len(widths)))
+    return widths
+
+
+def normalize_types(raw_values: list[str], count: int) -> list[str]:
+    values = list(raw_values)[:count]
+    values.extend([""] * (count - len(values)))
+    return values
 
 
 def load_entries(client: Client) -> list[dict[str, Any]]:
-    result = (
+    response = (
         client.table("portfolio_entries")
         .select("id,description,media_urls,media_types,media_sizes,display_order,created_at")
         .order("display_order", desc=False)
         .order("created_at", desc=True)
         .execute()
     )
-    return result.data or []
+    return response.data or []
 
 
 def upload_file(client: Client, uploaded_file: Any) -> tuple[str, str]:
-    original = uploaded_file.name
-    safe_name = "".join(c if c.isalnum() or c in ".-_" else "_" for c in original)
+    safe_name = "".join(
+        char if char.isalnum() or char in ".-_" else "_"
+        for char in uploaded_file.name
+    )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     path = f"uploads/{stamp}_{safe_name}"
-    raw = uploaded_file.getvalue()
     content_type = uploaded_file.type or "application/octet-stream"
     client.storage.from_("portfolio-media").upload(
         path,
-        raw,
+        uploaded_file.getvalue(),
         {"content-type": content_type, "upsert": "false"},
     )
-    public_url = client.storage.from_("portfolio-media").get_public_url(path)
-    return public_url, content_type
+    return client.storage.from_("portfolio-media").get_public_url(path), content_type
 
 
 def storage_path_from_url(url: str) -> str | None:
     marker = "/portfolio-media/"
-    parsed_path = urlparse(url).path
-    if marker not in parsed_path:
+    path = urlparse(url).path
+    if marker not in path:
         return None
-    return unquote(parsed_path.split(marker, 1)[1])
+    return unquote(path.split(marker, 1)[1])
 
 
 def render_gallery(entries: list[dict[str, Any]]) -> None:
@@ -117,21 +131,20 @@ def render_gallery(entries: list[dict[str, Any]]) -> None:
         return
 
     for entry in entries:
-        urls = entry.get("media_urls") or []
-        types = entry.get("media_types") or []
-        sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
+        urls = list(entry.get("media_urls") or [])
+        types = normalize_types(entry.get("media_types") or [], len(urls))
+        widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
 
-        media_html: list[str] = []
-        for idx, url in enumerate(urls):
+        media_parts: list[str] = []
+        for index, url in enumerate(urls):
             safe_url = html.escape(url, quote=True)
-            media_type = types[idx] if idx < len(types) else ""
-            span = SIZE_SPANS[sizes[idx]]
-            if media_type.startswith("video/"):
+            width = widths[index]
+            if types[index].startswith("video/"):
                 element = f'<video src="{safe_url}" controls preload="metadata"></video>'
             else:
                 element = f'<img src="{safe_url}" loading="lazy" alt="Portfolio media">'
-            media_html.append(
-                f'<div class="media-item" style="grid-column: span {span};">{element}</div>'
+            media_parts.append(
+                f'<div class="media-item" style="width:calc({width}% - 10px);">{element}</div>'
             )
 
         description = html.escape(entry.get("description", ""))
@@ -141,47 +154,72 @@ def render_gallery(entries: list[dict[str, Any]]) -> None:
 
         st.markdown(
             '<div class="portfolio-card">'
-            f'<div class="media-grid">{"".join(media_html)}</div>'
+            f'<div class="media-flex">{"".join(media_parts)}</div>'
             f'{description_html}{created_html}'
             '</div>',
             unsafe_allow_html=True,
         )
 
 
+def update_entry_media(
+    client: Client,
+    entry_id: int,
+    urls: list[str],
+    types: list[str],
+    widths: list[int],
+) -> None:
+    client.table("portfolio_entries").update(
+        {
+            "media_urls": urls,
+            "media_types": types,
+            "media_sizes": [str(width) for width in widths],
+        }
+    ).eq("id", entry_id).execute()
+
+
 def move_media(client: Client, entry: dict[str, Any], index: int, direction: int) -> None:
     urls = list(entry.get("media_urls") or [])
-    types = list(entry.get("media_types") or [])
-    sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
+    types = normalize_types(entry.get("media_types") or [], len(urls))
+    widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
     target = index + direction
     if target < 0 or target >= len(urls):
         return
-
-    while len(types) < len(urls):
-        types.append("")
-    for values in (urls, types, sizes):
+    for values in (urls, types, widths):
         values[index], values[target] = values[target], values[index]
-
-    client.table("portfolio_entries").update(
-        {"media_urls": urls, "media_types": types, "media_sizes": sizes}
-    ).eq("id", entry["id"]).execute()
+    update_entry_media(client, entry["id"], urls, types, widths)
 
 
-def save_media_sizes(client: Client, entry_id: int, sizes: list[str]) -> None:
-    client.table("portfolio_entries").update({"media_sizes": sizes}).eq("id", entry_id).execute()
+def set_media_width(client: Client, entry: dict[str, Any], index: int, width: int) -> None:
+    urls = list(entry.get("media_urls") or [])
+    types = normalize_types(entry.get("media_types") or [], len(urls))
+    widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
+    if 0 <= index < len(widths):
+        widths[index] = width
+        update_entry_media(client, entry["id"], urls, types, widths)
+
+
+def append_media(client: Client, entry: dict[str, Any], files: list[Any]) -> None:
+    urls = list(entry.get("media_urls") or [])
+    types = normalize_types(entry.get("media_types") or [], len(urls))
+    widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
+    for uploaded_file in files:
+        url, media_type = upload_file(client, uploaded_file)
+        urls.append(url)
+        types.append(media_type)
+        widths.append(20)
+    update_entry_media(client, entry["id"], urls, types, widths)
 
 
 def delete_media(client: Client, entry: dict[str, Any], index: int) -> None:
     urls = list(entry.get("media_urls") or [])
-    types = list(entry.get("media_types") or [])
-    sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
+    types = normalize_types(entry.get("media_types") or [], len(urls))
+    widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
     if index < 0 or index >= len(urls):
         return
 
     removed_url = urls.pop(index)
-    if index < len(types):
-        types.pop(index)
-    sizes.pop(index)
-
+    types.pop(index)
+    widths.pop(index)
     storage_path = storage_path_from_url(removed_url)
     if storage_path:
         try:
@@ -190,9 +228,7 @@ def delete_media(client: Client, entry: dict[str, Any], index: int) -> None:
             pass
 
     if urls:
-        client.table("portfolio_entries").update(
-            {"media_urls": urls, "media_types": types, "media_sizes": sizes}
-        ).eq("id", entry["id"]).execute()
+        update_entry_media(client, entry["id"], urls, types, widths)
     else:
         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
 
@@ -201,22 +237,12 @@ def move_entry(client: Client, entries: list[dict[str, Any]], index: int, direct
     target = index + direction
     if target < 0 or target >= len(entries):
         return
-
     current = entries[index]
     other = entries[target]
-    current_order = current.get("display_order")
-    other_order = other.get("display_order")
-    if current_order is None:
-        current_order = index + 1
-    if other_order is None:
-        other_order = target + 1
-
-    client.table("portfolio_entries").update(
-        {"display_order": other_order}
-    ).eq("id", current["id"]).execute()
-    client.table("portfolio_entries").update(
-        {"display_order": current_order}
-    ).eq("id", other["id"]).execute()
+    current_order = int(current.get("display_order") or index + 1)
+    other_order = int(other.get("display_order") or target + 1)
+    client.table("portfolio_entries").update({"display_order": other_order}).eq("id", current["id"]).execute()
+    client.table("portfolio_entries").update({"display_order": current_order}).eq("id", other["id"]).execute()
 
 
 client = get_supabase()
@@ -254,10 +280,10 @@ with admin_tab:
             else:
                 st.error("Incorrect password.")
     else:
-        top_left, top_right = st.columns([5, 1])
-        with top_left:
+        header_left, header_right = st.columns([5, 1])
+        with header_left:
             st.subheader("Add a portfolio entry")
-        with top_right:
+        with header_right:
             if st.button("Lock"):
                 st.session_state.admin_authenticated = False
                 st.rerun()
@@ -265,12 +291,12 @@ with admin_tab:
         with st.form("upload_form", clear_on_submit=True):
             files = st.file_uploader(
                 "Photos or videos",
-                type=["png", "jpg", "jpeg", "webp", "gif", "mp4", "mov", "m4v", "webm"],
+                type=MEDIA_EXTENSIONS,
                 accept_multiple_files=True,
             )
             description = st.text_area(
                 "Description",
-                height=160,
+                height=150,
                 placeholder="Explain the project, process, question, or story behind these materials...",
             )
             publish = st.form_submit_button("Publish to exhibition", type="primary")
@@ -280,23 +306,21 @@ with admin_tab:
                 st.warning("Please upload at least one photo or video.")
             else:
                 try:
+                    existing = load_entries(client)
+                    next_order = max([int(item.get("display_order") or 0) for item in existing] or [0]) + 1
                     urls: list[str] = []
-                    media_types: list[str] = []
-                    entries_before = load_entries(client)
-                    next_order = max(
-                        [int(e.get("display_order") or 0) for e in entries_before] or [0]
-                    ) + 1
+                    types: list[str] = []
                     with st.spinner("Publishing..."):
-                        for file in files:
-                            url, media_type = upload_file(client, file)
+                        for uploaded_file in files:
+                            url, media_type = upload_file(client, uploaded_file)
                             urls.append(url)
-                            media_types.append(media_type)
+                            types.append(media_type)
                         client.table("portfolio_entries").insert(
                             {
                                 "description": description.strip(),
                                 "media_urls": urls,
-                                "media_types": media_types,
-                                "media_sizes": ["Small"] * len(urls),
+                                "media_types": types,
+                                "media_sizes": ["20"] * len(urls),
                                 "display_order": next_order,
                             }
                         ).execute()
@@ -307,66 +331,80 @@ with admin_tab:
 
         st.divider()
         st.subheader("Manage published entries")
-        st.caption("Move whole entries, reorder individual media, adjust sizes, or remove content.")
+        st.caption("Move entries, append media, resize proportionally, reorder, or remove items.")
+
         try:
             entries = load_entries(client)
             for entry_index, entry in enumerate(entries):
                 st.markdown('<div class="manage-box">', unsafe_allow_html=True)
-                heading_cols = st.columns([4, 1, 1, 1])
-                with heading_cols[0]:
+                heading = st.columns([4, 1, 1, 1])
+                with heading[0]:
                     preview = (entry.get("description") or "Untitled entry").strip()
                     st.markdown(f"**{preview[:120] + ('…' if len(preview) > 120 else '')}**")
-                with heading_cols[1]:
+                with heading[1]:
                     if st.button("Move up", key=f"entry_up_{entry['id']}", disabled=entry_index == 0, use_container_width=True):
                         move_entry(client, entries, entry_index, -1)
                         st.rerun()
-                with heading_cols[2]:
+                with heading[2]:
                     if st.button("Move down", key=f"entry_down_{entry['id']}", disabled=entry_index == len(entries) - 1, use_container_width=True):
                         move_entry(client, entries, entry_index, 1)
                         st.rerun()
-                with heading_cols[3]:
-                    if st.button("Delete entry", key=f"delete_{entry['id']}", use_container_width=True):
+                with heading[3]:
+                    if st.button("Delete entry", key=f"delete_entry_{entry['id']}", use_container_width=True):
                         client.table("portfolio_entries").delete().eq("id", entry["id"]).execute()
                         st.rerun()
 
-                urls = entry.get("media_urls") or []
-                types = entry.get("media_types") or []
-                sizes = normalize_sizes(entry.get("media_sizes") or [], len(urls))
-                selected_sizes: list[str] = []
+                with st.expander("Add photos or videos to this entry"):
+                    new_files = st.file_uploader(
+                        "Select one or more files",
+                        type=MEDIA_EXTENSIONS,
+                        accept_multiple_files=True,
+                        key=f"append_files_{entry['id']}",
+                    )
+                    if st.button("Add to this entry", key=f"append_button_{entry['id']}", type="primary"):
+                        if not new_files:
+                            st.warning("Please select at least one file.")
+                        else:
+                            with st.spinner("Adding media..."):
+                                append_media(client, entry, new_files)
+                            st.success("Media added.")
+                            st.rerun()
 
+                urls = list(entry.get("media_urls") or [])
+                types = normalize_types(entry.get("media_types") or [], len(urls))
+                widths = normalize_widths(entry.get("media_sizes") or [], len(urls))
                 if urls:
                     media_columns = st.columns(min(5, len(urls)), gap="small")
-                    for idx, url in enumerate(urls):
-                        with media_columns[idx % len(media_columns)]:
-                            media_type = types[idx] if idx < len(types) else ""
-                            if media_type.startswith("video/"):
+                    for index, url in enumerate(urls):
+                        with media_columns[index % len(media_columns)]:
+                            if types[index].startswith("video/"):
                                 st.video(url)
                             else:
                                 st.image(url, use_container_width=True)
-                            selected_size = st.selectbox(
-                                "Display size",
-                                SIZE_OPTIONS,
-                                index=SIZE_OPTIONS.index(sizes[idx]),
-                                key=f"size_{entry['id']}_{idx}",
+                            chosen_width = st.slider(
+                                "Width (%)",
+                                min_value=15,
+                                max_value=100,
+                                value=widths[index],
+                                step=5,
+                                key=f"width_{entry['id']}_{index}",
                             )
-                            selected_sizes.append(selected_size)
-                            left_button, right_button = st.columns(2)
-                            with left_button:
-                                if st.button("←", key=f"left_{entry['id']}_{idx}", disabled=idx == 0, use_container_width=True):
-                                    move_media(client, entry, idx, -1)
-                                    st.rerun()
-                            with right_button:
-                                if st.button("→", key=f"right_{entry['id']}_{idx}", disabled=idx == len(urls) - 1, use_container_width=True):
-                                    move_media(client, entry, idx, 1)
-                                    st.rerun()
-                            if st.button("Remove", key=f"remove_{entry['id']}_{idx}", use_container_width=True):
-                                delete_media(client, entry, idx)
+                            if st.button("Apply width", key=f"apply_width_{entry['id']}_{index}", use_container_width=True):
+                                set_media_width(client, entry, index, chosen_width)
+                                st.success(f"Width saved: {chosen_width}%")
                                 st.rerun()
-
-                    if st.button("Save media sizes", key=f"save_sizes_{entry['id']}", type="primary"):
-                        save_media_sizes(client, entry["id"], selected_sizes)
-                        st.success("Media sizes saved.")
-                        st.rerun()
+                            left, right = st.columns(2)
+                            with left:
+                                if st.button("←", key=f"left_{entry['id']}_{index}", disabled=index == 0, use_container_width=True):
+                                    move_media(client, entry, index, -1)
+                                    st.rerun()
+                            with right:
+                                if st.button("→", key=f"right_{entry['id']}_{index}", disabled=index == len(urls) - 1, use_container_width=True):
+                                    move_media(client, entry, index, 1)
+                                    st.rerun()
+                            if st.button("Remove", key=f"remove_{entry['id']}_{index}", use_container_width=True):
+                                delete_media(client, entry, index)
+                                st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
         except Exception as exc:
             st.error(f"Entries could not be managed: {exc}")
