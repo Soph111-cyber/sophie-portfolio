@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sophie's Wonderland</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <button id="settingsBtn" class="settings-btn" aria-label="Settings">⚙</button>
+
+  <main id="app">
+    <section id="landing" class="screen landing active">
+      <div class="stars"></div>
+      <div class="landing-center">
+        <button id="holeBtn" class="hole" aria-label="Enter the hole">
+          <span class="hole-ring r1"></span><span class="hole-ring r2"></span><span class="hole-ring r3"></span>
+        </button>
+        <p class="landing-copy">I have a habit of going down weird holes.<br><em>Sometimes literally.</em></p>
+        <button id="enterBtn" class="primary ghost">[ ENTER THE HOLE ]</button>
+      </div>
+    </section>
+
+    <section id="hub" class="screen hub">
+      <div class="grain"></div>
+      <div class="hub-wrap">
+        <p class="eyebrow">WELCOME TO</p>
+        <h1>Sophie's Wonderland!</h1>
+        <p id="hubPrompt" class="hub-prompt">Which would you like to explore first?</p>
+        <div id="sectionGrid" class="section-grid"></div>
+      </div>
+    </section>
+
+    <section id="explore" class="screen explore">
+      <div id="exploreBg" class="explore-bg"></div>
+      <div class="explore-overlay"></div>
+      <div class="explore-shell">
+        <button id="backToHub" class="tiny-btn">← Wonderland</button>
+        <div id="exploreContent" class="explore-content"></div>
+        <button id="nextBtn" class="next-btn">NEXT ↓</button>
+      </div>
+    </section>
+
+    <section id="depth" class="screen depth">
+      <div class="depth-hole"></div>
+      <div class="depth-copy">
+        <p class="congrats">congrats!</p>
+        <h2>Depth reached so far: <span id="depthValue">50</span> m</h2>
+        <p>Estimated depth of curiosity: <em>unknown.</em></p>
+      </div>
+      <div id="depthChoices" class="depth-choices"></div>
+    </section>
+
+    <section id="final" class="screen final-screen">
+      <div class="final-hole-wrap"><div class="final-hole"></div></div>
+      <div class="final-copy">
+        <p class="eyebrow">END OF THIS MAP · NOT THE DIGGING</p>
+        <h2 id="finalTitle">Bye, for now.</h2>
+        <p id="finalQuote" class="final-quote"></p>
+        <button id="restartBtn" class="primary ghost">[ FALL IN AGAIN ]</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="passwordDialog" class="modal password-modal">
+    <form method="dialog" id="passwordForm">
+      <button class="close-x" value="cancel">×</button>
+      <p class="eyebrow">ADMIN ACCESS</p>
+      <h3>Secret tunnel.</h3>
+      <p>Enter the password to edit Sophie's Wonderland.</p>
+      <input id="passwordInput" type="password" autocomplete="current-password" placeholder="password" />
+      <p id="passwordError" class="error"></p>
+      <button type="submit" class="primary solid">ENTER SETTINGS</button>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal settings-modal">
+    <div class="settings-shell">
+      <header class="settings-header">
+        <div>
+          <p class="eyebrow">WONDERLAND CONTROL ROOM</p>
+          <h3>Edit everything.</h3>
+        </div>
+        <button id="closeSettings" class="close-x">×</button>
+      </header>
+
+      <div class="settings-tabs">
+        <button class="tab active" data-tab="general">General</button>
+        <button class="tab" data-tab="sections">Explore Sections</button>
+        <button class="tab" data-tab="data">Import / Export</button>
+      </div>
+
+      <section class="tab-panel active" id="tab-general">
+        <label>Wonderland prompt<textarea id="editHubPrompt"></textarea></label>
+        <label>Final title<input id="editFinalTitle" /></label>
+        <label>Final message<textarea id="editFinalQuote" rows="6"></textarea></label>
+        <label>Depth gained after each room (m)<input id="editDepthStep" type="number" min="1" /></label>
+        <button id="saveGeneral" class="primary solid">Save general settings</button>
+      </section>
+
+      <section class="tab-panel" id="tab-sections">
+        <div class="section-admin-top">
+          <p>Drag rooms to reorder them. Open a room to edit its content blocks.</p>
+          <button id="addSection" class="primary solid">+ Add room</button>
+        </div>
+        <div id="adminSectionList" class="admin-section-list"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-data">
+        <p class="settings-note">Your edits are saved in this browser. Export a JSON backup before switching devices or publishing a new copy.</p>
+        <div class="data-actions">
+          <button id="exportData" class="primary solid">Export JSON</button>
+          <label class="primary ghost file-label">Import JSON<input id="importData" type="file" accept="application/json" hidden /></label>
+          <button id="resetData" class="danger">Reset to demo content</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="sectionEditor" class="modal editor-modal">
+    <div class="settings-shell editor-shell">
+      <header class="settings-header">
+        <div>
+          <p class="eyebrow">ROOM EDITOR</p>
+          <h3 id="editorHeading">Edit room</h3>
+        </div>
+        <button id="closeSectionEditor" class="close-x">×</button>
+      </header>
+      <div class="editor-grid">
+        <label>Button label<input id="secLabel" /></label>
+        <label>Emoji / icon<input id="secIcon" maxlength="8" /></label>
+        <label class="wide">Room title<input id="secTitle" /></label>
+        <label>Button subtitle<input id="secSubtitle" /></label>
+        <label>Background image URL<input id="secBg" placeholder="https://..." /></label>
+        <label>Background opacity <input id="secOpacity" type="range" min="0" max="1" step="0.05" /></label>
+        <label>Overlay darkness <input id="secOverlay" type="range" min="0" max="0.95" step="0.05" /></label>
+      </div>
+      <div class="block-toolbar">
+        <h4>Content blocks</h4>
+        <div>
+          <button class="small solidish" data-add-block="text">+ Text</button>
+          <button class="small solidish" data-add-block="image">+ Image</button>
+          <button class="small solidish" data-add-block="gallery">+ Gallery</button>
+          <button class="small solidish" data-add-block="quote">+ Quote</button>
+        </div>
+      </div>
+      <div id="blockEditorList" class="block-editor-list"></div>
+      <footer class="editor-footer">
+        <button id="deleteSection" class="danger">Delete room</button>
+        <button id="saveSection" class="primary solid">Save room</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
