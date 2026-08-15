@@ -1,6 +1,4 @@
-// Advanced image + gallery layout controls for Sophie's Wonderland.
-// Loaded after perfect.js so these functions extend the existing cloud CMS.
-
+// Advanced image, gallery, and true multi-image-row controls.
 (function(){
   const oldBlockHTML = window.blockHTML;
 
@@ -11,27 +9,33 @@
     return (b.images||[]).filter(Boolean).map(u=>({url:u,width:null}));
   }
 
+  function renderRowHTML(b){
+    const items=normGallery(b);
+    const perRow=Math.max(1,Math.min(5,Number(b.perRow)||3));
+    const gap=Math.max(0,Math.min(48,Number(b.gap)||14));
+    const height=Math.max(100,Math.min(800,Number(b.height)||320));
+    const fit=b.fit==='contain'?'contain':'cover';
+    const fallback=(100-(perRow-1)*(gap/10))/perRow;
+    const imgs=items.map((it,i)=>{
+      const w=Math.max(10,Math.min(100,Number(it.width)||fallback));
+      return `<figure class="image-row-item" style="--row-item-width:${w}%;--row-height:${height}px"><img src="${esc(it.url)}" alt="Image ${i+1}" style="object-fit:${fit}"></figure>`;
+    }).join('');
+    return `<div class="content-block image-row-block" style="--row-gap:${gap}px">${imgs}</div>`;
+  }
+
   window.blockHTML = function(b){
     if(b.type==='image' && b.url){
       const width=Math.max(20,Math.min(100,Number(b.width)||100));
       const align=['left','center','right'].includes(b.align)?b.align:'center';
       const hMode=b.heightMode||'auto';
       const height=hMode==='fixed'?Math.max(120,Math.min(900,Number(b.height)||420)):null;
-      const style=`--image-width:${width}%;--image-align:${align};${height?`--image-height:${height}px;`:''}`;
+      const style=`--image-width:${width}%;${height?`--image-height:${height}px;`:''}`;
       return `<figure class="content-block block-image advanced-image ${esc(b.layout||'editorial')} align-${align} ${hMode==='fixed'?'fixed-height':''}" style="${style}"><img src="${esc(b.url)}" alt="Photo"><figcaption class="block-caption">${esc(b.caption||'')}</figcaption></figure>`;
     }
+    if(b.type==='imageRow') return renderRowHTML(b);
     if(b.type==='gallery'){
-      const items=normGallery(b);
-      const perRow=Math.max(1,Math.min(5,Number(b.perRow||b.columns)||3));
-      const gap=Math.max(0,Math.min(48,Number(b.gap)||14));
-      const height=Math.max(100,Math.min(800,Number(b.height)||320));
-      const fit=b.fit==='contain'?'contain':'cover';
-      const fallback=100/perRow;
-      const imgs=items.map((it,i)=>{
-        const w=Math.max(10,Math.min(100,Number(it.width)||fallback));
-        return `<figure class="gallery-flex-item" style="--item-width:${w}%;--gallery-height:${height}px"><img src="${esc(it.url)}" alt="Gallery image ${i+1}" style="object-fit:${fit}"></figure>`;
-      }).join('');
-      return `<div class="content-block gallery gallery-flex" style="--gallery-gap:${gap}px">${imgs}</div>`;
+      const copy={...b,perRow:b.perRow||b.columns||3};
+      return renderRowHTML(copy).replace('image-row-block','gallery gallery-flex');
     }
     return oldBlockHTML ? oldBlockHTML(b) : '';
   };
@@ -44,10 +48,7 @@
     return `
       <div class="layout-preview-wrap"><img class="preview-img" data-preview src="${esc(b.url||'')}" style="${b.url?'':'display:none'}"></div>
       <input data-field="url" type="hidden" value="${esc(b.url||'')}">
-      <div class="inline-grid">
-        <label class="upload-btn">Upload / replace photo<input data-image-upload type="file" accept="image/*" hidden></label>
-        <input data-field="caption" value="${esc(b.caption||'')}" placeholder="Caption">
-      </div>
+      <div class="inline-grid"><label class="upload-btn">Upload / replace photo<input data-image-upload type="file" accept="image/*" hidden></label><input data-field="caption" value="${esc(b.caption||'')}" placeholder="Caption"></div>
       <div class="layout-control-grid">
         <label>Image size <strong data-size-readout>${width}%</strong><input data-field="width" data-live-size type="range" min="20" max="100" step="5" value="${width}"></label>
         <label>Alignment<select data-field="align"><option value="left" ${align==='left'?'selected':''}>Left</option><option value="center" ${align==='center'?'selected':''}>Center</option><option value="right" ${align==='right'?'selected':''}>Right</option></select></label>
@@ -56,22 +57,24 @@
       </div>`;
   }
 
-  function galleryFields(b){
+  function rowFields(b,label='IMAGE ROW'){
     const items=normGallery(b);
     const perRow=Math.max(1,Math.min(5,Number(b.perRow||b.columns)||3));
     const gap=Math.max(0,Math.min(48,Number(b.gap)||14));
     const height=Math.max(100,Math.min(800,Number(b.height)||320));
     const fit=b.fit==='contain'?'contain':'cover';
     return `
+      <div class="row-help"><strong>${label}</strong><span>Upload several photos, then control exactly how many fit on one row and how wide each one is.</span></div>
+      <div class="row-live-preview" data-row-live-preview></div>
       <div class="gallery-admin-preview advanced-gallery-editor" data-gallery-preview></div>
       <textarea data-field="galleryItems" hidden>${esc(JSON.stringify(items))}</textarea>
       <div class="gallery-global-controls">
-        <label>Photos per row<select data-field="perRow">${[1,2,3,4,5].map(n=>`<option value="${n}" ${perRow===n?'selected':''}>${n}</option>`).join('')}</select></label>
+        <label>Photos on each row<select data-field="perRow">${[1,2,3,4,5].map(n=>`<option value="${n}" ${perRow===n?'selected':''}>${n}</option>`).join('')}</select></label>
         <label>Gap <strong>${gap}px</strong><input data-field="gap" data-live-gap type="range" min="0" max="48" step="2" value="${gap}"></label>
         <label>Image height <strong>${height}px</strong><input data-field="height" data-live-height type="range" min="100" max="800" step="20" value="${height}"></label>
-        <label>Image fit<select data-field="fit"><option value="cover" ${fit==='cover'?'selected':''}>Cover</option><option value="contain" ${fit==='contain'?'selected':''}>Contain</option></select></label>
+        <label>Image fit<select data-field="fit"><option value="cover" ${fit==='cover'?'selected':''}>Crop to fill</option><option value="contain" ${fit==='contain'?'selected':''}>Show whole image</option></select></label>
       </div>
-      <div class="gallery-add-row"><label class="upload-btn">+ Add photos<input data-gallery-upload type="file" accept="image/*" multiple hidden></label><button class="small" data-equalize>Equal widths</button><button class="small" data-clear-gallery>Clear gallery</button></div>`;
+      <div class="gallery-add-row"><label class="upload-btn">+ Upload multiple photos<input data-gallery-upload type="file" accept="image/*" multiple hidden></label><button class="small" data-equalize>Make equal widths</button><button class="small" data-clear-gallery>Clear row</button></div>`;
   }
 
   window.renderBlockEditor = function(blocks){
@@ -81,43 +84,57 @@
       let fields='';
       if(b.type==='text'||b.type==='quote') fields=`<textarea data-field="text">${esc(b.text||'')}</textarea>`;
       if(b.type==='image') fields=imageFields(b);
-      if(b.type==='gallery') fields=galleryFields(b);
-      el.innerHTML=`<div class="block-edit-top"><strong>${b.type.toUpperCase()}</strong><div><button class="small" data-up>↑</button><button class="small" data-down>↓</button><button class="small" data-remove>Remove</button></div></div>${fields}`;
+      if(b.type==='imageRow') fields=rowFields(b,'IMAGE ROW');
+      if(b.type==='gallery') fields=rowFields(b,'GALLERY');
+      el.innerHTML=`<div class="block-edit-top"><strong>${b.type==='imageRow'?'IMAGE ROW':b.type.toUpperCase()}</strong><div><button class="small" data-up>↑</button><button class="small" data-down>↓</button><button class="small" data-remove>Remove</button></div></div>${fields}`;
       el.querySelector('[data-up]').onclick=()=>moveBlock(i,-1);
       el.querySelector('[data-down]').onclick=()=>moveBlock(i,1);
       el.querySelector('[data-remove]').onclick=()=>removeBlock(i);
 
       const size=el.querySelector('[data-live-size]');
-      if(size) size.oninput=()=>{el.querySelector('[data-size-readout]').textContent=size.value+'%'; const p=el.querySelector('[data-preview]'); if(p)p.style.width=size.value+'%';};
+      if(size) size.oninput=()=>{el.querySelector('[data-size-readout]').textContent=size.value+'%';const p=el.querySelector('[data-preview]');if(p)p.style.width=size.value+'%';};
 
       const iu=el.querySelector('[data-image-upload]');
       if(iu) iu.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const r=await uploadFile(f,1800,.84);el.querySelector('[data-field="url"]').value=r.url;const im=el.querySelector('[data-preview]');im.src=r.url;im.style.display='block';queueDraft()}catch(err){markCloud(err.message,'bad')}e.target.value=''};
 
-      if(b.type==='gallery') setupGalleryEditor(el,b);
+      if(b.type==='imageRow'||b.type==='gallery') setupRowEditor(el,b);
       list.appendChild(el);
     });
   };
 
-  function getGalleryItems(el){
-    try{return JSON.parse(el.querySelector('[data-field="galleryItems"]').value||'[]')}catch{return[]}
+  function getItems(el){try{return JSON.parse(el.querySelector('[data-field="galleryItems"]').value||'[]')}catch{return[]}}
+  function setItems(el,items){el.querySelector('[data-field="galleryItems"]').value=JSON.stringify(items);renderEditorCards(el);renderLivePreview(el)}
+
+  function renderLivePreview(el){
+    const box=el.querySelector('[data-row-live-preview]');if(!box)return;
+    const items=getItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,gap=Number(el.querySelector('[data-field="gap"]').value)||0,height=Number(el.querySelector('[data-field="height"]').value)||320,fit=el.querySelector('[data-field="fit"]').value||'cover',fallback=100/perRow;
+    box.style.setProperty('--preview-gap',gap+'px');
+    box.innerHTML=items.map((it,i)=>{const w=Math.max(10,Math.min(100,Number(it.width)||fallback));return `<div class="row-preview-item" style="flex-basis:${w}%;height:${Math.min(180,height)}px"><img src="${esc(it.url)}" style="object-fit:${fit}" alt="preview ${i+1}"><span>${Math.round(w)}%</span></div>`}).join('');
   }
-  function setGalleryItems(el,items){el.querySelector('[data-field="galleryItems"]').value=JSON.stringify(items);renderGalleryEditor(el)}
-  function renderGalleryEditor(el){
-    const box=el.querySelector('[data-gallery-preview]'); if(!box)return;
-    const items=getGalleryItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,fallback=100/perRow;
+
+  function renderEditorCards(el){
+    const box=el.querySelector('[data-gallery-preview]');if(!box)return;
+    const items=getItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,fallback=100/perRow;
     box.innerHTML=items.map((it,j)=>{const w=Math.max(10,Math.min(100,Number(it.width)||fallback));return `<div class="ga-card"><div class="ga-thumb" style="background-image:url('${esc(it.url)}')"><button data-remove-photo="${j}">×</button></div><label>Width <strong>${Math.round(w)}%</strong><input type="range" min="10" max="100" step="5" value="${w}" data-photo-width="${j}"></label></div>`}).join('');
-    box.querySelectorAll('[data-remove-photo]').forEach(btn=>btn.onclick=()=>{const arr=getGalleryItems(el);arr.splice(Number(btn.dataset.removePhoto),1);setGalleryItems(el,arr)});
-    box.querySelectorAll('[data-photo-width]').forEach(inp=>inp.oninput=()=>{const arr=getGalleryItems(el),idx=Number(inp.dataset.photoWidth);arr[idx].width=Number(inp.value);el.querySelector('[data-field="galleryItems"]').value=JSON.stringify(arr);inp.parentElement.querySelector('strong').textContent=inp.value+'%'});
+    box.querySelectorAll('[data-remove-photo]').forEach(btn=>btn.onclick=()=>{const arr=getItems(el);arr.splice(Number(btn.dataset.removePhoto),1);setItems(el,arr)});
+    box.querySelectorAll('[data-photo-width]').forEach(inp=>inp.oninput=()=>{const arr=getItems(el),idx=Number(inp.dataset.photoWidth);arr[idx].width=Number(inp.value);el.querySelector('[data-field="galleryItems"]').value=JSON.stringify(arr);inp.parentElement.querySelector('strong').textContent=inp.value+'%';renderLivePreview(el)});
   }
-  function setupGalleryEditor(el,b){
-    renderGalleryEditor(el);
+
+  function equalize(el,force=true){
+    const arr=getItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,w=100/perRow;
+    arr.forEach(x=>{if(force||!x.width)x.width=w});setItems(el,arr);
+  }
+
+  function setupRowEditor(el,b){
+    renderEditorCards(el);renderLivePreview(el);
     const gu=el.querySelector('[data-gallery-upload]');
-    gu.onchange=async e=>{const arr=getGalleryItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,fallback=100/perRow;for(const f of [...e.target.files]){try{const r=await uploadFile(f,1500,.82);arr.push({url:r.url,width:fallback})}catch(err){markCloud(err.message,'bad');break}}setGalleryItems(el,arr);queueDraft();e.target.value=''};
-    el.querySelector('[data-clear-gallery]').onclick=()=>setGalleryItems(el,[]);
-    el.querySelector('[data-equalize]').onclick=()=>{const arr=getGalleryItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,w=100/perRow;arr.forEach(x=>x.width=w);setGalleryItems(el,arr)};
-    el.querySelector('[data-field="perRow"]').onchange=()=>{const arr=getGalleryItems(el),w=100/Number(el.querySelector('[data-field="perRow"]').value);arr.forEach(x=>{if(!x.width)x.width=w});setGalleryItems(el,arr)};
-    const gap=el.querySelector('[data-live-gap]'); if(gap)gap.oninput=()=>gap.previousElementSibling.textContent=gap.value+'px';
-    const h=el.querySelector('[data-live-height]'); if(h)h.oninput=()=>h.previousElementSibling.textContent=h.value+'px';
+    gu.onchange=async e=>{const arr=getItems(el),perRow=Number(el.querySelector('[data-field="perRow"]').value)||3,fallback=100/perRow;for(const f of [...e.target.files]){try{const r=await uploadFile(f,1500,.82);arr.push({url:r.url,width:fallback})}catch(err){markCloud(err.message,'bad');break}}setItems(el,arr);queueDraft();e.target.value=''};
+    el.querySelector('[data-clear-gallery]').onclick=()=>setItems(el,[]);
+    el.querySelector('[data-equalize]').onclick=()=>equalize(el,true);
+    el.querySelector('[data-field="perRow"]').onchange=()=>equalize(el,true);
+    const gap=el.querySelector('[data-live-gap]');if(gap)gap.oninput=()=>{gap.previousElementSibling.textContent=gap.value+'px';renderLivePreview(el)};
+    const h=el.querySelector('[data-live-height]');if(h)h.oninput=()=>{h.previousElementSibling.textContent=h.value+'px';renderLivePreview(el)};
+    el.querySelector('[data-field="fit"]').onchange=()=>renderLivePreview(el);
   }
 
   window.collectBlocks = function(){
