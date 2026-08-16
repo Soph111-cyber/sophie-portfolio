@@ -39,6 +39,40 @@
     });
   }
 
+  function applyExploreUiFix(){
+    const next=document.getElementById('nextBtn');
+    if(next) next.textContent='GO DEEPER ↓';
+
+    if(!document.getElementById('explore-ui-fix-style')){
+      const style=document.createElement('style');
+      style.id='explore-ui-fix-style';
+      style.textContent=`
+        #explore .explore-shell > #backToHub{
+          position:fixed;
+          top:20px;
+          left:210px;
+          z-index:70;
+          margin:0;
+        }
+        @media (max-width:900px){
+          #explore .explore-shell > #backToHub{left:205px;}
+        }
+        @media (max-width:700px){
+          #explore .explore-shell > #backToHub{
+            top:18px;
+            left:18px;
+          }
+          .journey-hud{
+            top:68px !important;
+            bottom:auto !important;
+            left:14px !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
   const oldOpen=window.openSectionEditor;
   if(typeof oldOpen==='function'){
     window.openSectionEditor=function(id){
@@ -51,8 +85,12 @@
     if(e.target && e.target.closest('[data-edit]')) setTimeout(bindToolbar,0);
   });
 
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindToolbar);
-  else bindToolbar();
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',()=>{bindToolbar();applyExploreUiFix();});
+  }else{
+    bindToolbar();
+    applyExploreUiFix();
+  }
 
   const obs=new MutationObserver(()=>ensureImageRowButton());
   const toolbar=document.querySelector('.block-toolbar');
