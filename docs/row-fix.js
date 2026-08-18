@@ -73,6 +73,22 @@
     }
   }
 
+  function loadTypographyControls(){
+    if(!document.querySelector('link[data-typography-controls]')){
+      const css=document.createElement('link');
+      css.rel='stylesheet';
+      css.href='typography-controls.css?v=20260818-1538';
+      css.dataset.typographyControls='1';
+      document.head.appendChild(css);
+    }
+    if(!document.querySelector('script[data-typography-controls]')){
+      const js=document.createElement('script');
+      js.src='typography-controls.js?v=20260818-1538';
+      js.dataset.typographyControls='1';
+      document.body.appendChild(js);
+    }
+  }
+
   const oldOpen=window.openSectionEditor;
   if(typeof oldOpen==='function'){
     window.openSectionEditor=function(id){
@@ -86,10 +102,11 @@
   });
 
   if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',()=>{bindToolbar();applyExploreUiFix();});
+    document.addEventListener('DOMContentLoaded',()=>{bindToolbar();applyExploreUiFix();loadTypographyControls();});
   }else{
     bindToolbar();
     applyExploreUiFix();
+    loadTypographyControls();
   }
 
   const obs=new MutationObserver(()=>ensureImageRowButton());
