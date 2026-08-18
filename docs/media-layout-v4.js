@@ -30,6 +30,62 @@
     return prevBlockHTML?prevBlockHTML(b):'';
   };
 
+  function syncRowOrder(el,b,from,to){
+    if(from===to||from<0||to<0)return;
+    const field=el.querySelector('[data-field="galleryItems"]');
+    let items=[];
+    try{items=JSON.parse(field?.value||'[]')}catch{items=safeItems(b)}
+    if(!Array.isArray(items)||from>=items.length||to>=items.length)return;
+    const [moved]=items.splice(from,1);items.splice(to,0,moved);
+    if(field)field.value=JSON.stringify(items);
+    b.items=items;b.images=items.map(x=>x.url);
+
+    const cards=[...el.querySelectorAll('[data-gallery-preview] .ga-card')];
+    const previews=[...el.querySelectorAll('[data-row-live-preview] .row-preview-item')];
+    const moveNode=(nodes,a,z)=>{
+      const node=nodes[a];if(!node)return;
+      if(z>=nodes.length-1)nodes[0]?.parentElement?.appendChild(node);
+      else if(z>a)nodes[0]?.parentElement?.insertBefore(node,nodes[z+1]);
+      else nodes[0]?.parentElement?.insertBefore(node,nodes[z]);
+    };
+    moveNode(cards,from,to);moveNode(previews,from,to);
+    decorateRowOrdering(el,b);
+    if(typeof queueDraft==='function')queueDraft();
+  }
+
+  function decorateRowOrdering(el,b){
+    if(b.type!=='imageRow')return;
+    const cards=[...el.querySelectorAll('[data-gallery-preview] .ga-card')];
+    cards.forEach((card,i)=>{
+      card.draggable=true;
+      card.dataset.rowOrderIndex=i;
+      card.classList.add('v4-sortable-card');
+      let tools=card.querySelector('.v4-row-order-tools');
+      if(!tools){
+        tools=document.createElement('div');tools.className='v4-row-order-tools';
+        tools.innerHTML='<button type="button" data-row-left title="Move left">←</button><span title="Drag to reorder">⋮⋮ drag</span><button type="button" data-row-right title="Move right">→</button>';
+        card.prepend(tools);
+      }
+      const left=tools.querySelector('[data-row-left]'),right=tools.querySelector('[data-row-right]');
+      left.disabled=i===0;right.disabled=i===cards.length-1;
+      left.onclick=e=>{e.preventDefault();e.stopPropagation();syncRowOrder(el,b,i,i-1)};
+      right.onclick=e=>{e.preventDefault();e.stopPropagation();syncRowOrder(el,b,i,i+1)};
+      card.ondragstart=e=>{card.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(i))};
+      card.ondragend=()=>card.classList.remove('dragging');
+      card.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move'};
+      card.ondrop=e=>{e.preventDefault();const from=Number(e.dataTransfer.getData('text/plain')),to=Number(card.dataset.rowOrderIndex);syncRowOrder(el,b,from,to)};
+    });
+    if(!document.getElementById('v4-row-order-style')){
+      const style=document.createElement('style');style.id='v4-row-order-style';style.textContent=`
+        .v4-sortable-card{cursor:grab;transition:.18s ease}.v4-sortable-card.dragging{opacity:.45;transform:scale(.97)}
+        .v4-row-order-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-2px 0 9px}
+        .v4-row-order-tools span{font:10px 'DM Mono',monospace;color:var(--muted);letter-spacing:.06em;cursor:grab;user-select:none}
+        .v4-row-order-tools button{width:30px;height:28px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.07);color:var(--ink);cursor:pointer}
+        .v4-row-order-tools button:disabled{opacity:.25;cursor:not-allowed}
+      `;document.head.appendChild(style);
+    }
+  }
+
   function enhanceEditor(blocks){
     [...document.querySelectorAll('#blockEditorList .block-edit')].forEach((el,i)=>{
       const b=blocks[i];if(!b)return;el.dataset.blockType=b.type;
@@ -44,7 +100,7 @@
       }
       if(b.type==='imageRow'){
         const help=el.querySelector('.row-help');
-        if(help){const span=help.querySelector('span');if(span)span.textContent='All photos in this Image Row share one caption. Individual photos only control width and crop.';}
+        if(help){const span=help.querySelector('span');if(span)span.textContent='All photos in this Image Row share one caption. Drag photo cards or use ← / → to change their order.';}
         if(!el.querySelector('.v4-shared-caption-editor')){
           const shared=document.createElement('div');shared.className='v4-shared-caption-editor';
           const text=sharedRowCaption(b),size=clamp(b.captionSize||13,9,32);
@@ -53,6 +109,7 @@
           (preview||help||el.firstChild).insertAdjacentElement('afterend',shared);
           const slider=shared.querySelector('[data-v4-row-caption-size]');slider.oninput=()=>shared.querySelector('[data-v4-row-caption-size-readout]').textContent=slider.value+'px';
         }
+        decorateRowOrdering(el,b);
       }
     });
   }
