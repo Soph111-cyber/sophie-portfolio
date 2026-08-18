@@ -7,13 +7,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260818-1500">
-  <link rel="stylesheet" href="perfect.css?v=20260818-1500">
-  <link rel="stylesheet" href="layout-controls.css?v=20260818-1500">
-  <link rel="stylesheet" href="media-layout-v3.css?v=20260818-1500">
-  <link rel="stylesheet" href="media-layout-v4.css?v=20260818-1500">
-  <link rel="stylesheet" href="landing-board.css?v=20260818-1500">
-  <link rel="stylesheet" href="hub-board.css?v=20260818-1500">
+  <link rel="stylesheet" href="styles.css?v=20260818-1545">
+  <link rel="stylesheet" href="perfect.css?v=20260818-1545">
+  <link rel="stylesheet" href="layout-controls.css?v=20260818-1545">
+  <link rel="stylesheet" href="media-layout-v3.css?v=20260818-1545">
+  <link rel="stylesheet" href="media-layout-v4.css?v=20260818-1545">
+  <link rel="stylesheet" href="typography-controls.css?v=20260818-1545">
+  <link rel="stylesheet" href="landing-board.css?v=20260818-1545">
+  <link rel="stylesheet" href="hub-board.css?v=20260818-1545">
 </head>
 <body>
   <button id="settingsBtn" class="settings-btn" aria-label="Settings">⚙</button>
@@ -33,12 +34,13 @@
   </div></dialog>
   <dialog id="customThemeDialog" class="modal custom-theme-modal"><div class="settings-shell"><header class="settings-header"><div><p class="eyebrow">CUSTOM SKIN</p><h3 id="customThemeHeading">Create a skin</h3></div><button id="closeCustomTheme" class="close-x">×</button></header><div class="editor-grid"><label>Name<input id="themeName"/></label><label>Background<input id="themeBg" type="color"/></label><label>Panel color<input id="themePanel" type="color"/></label><label>Accent<input id="themeAccent" type="color"/></label><label>Text<input id="themeInk" type="color"/></label><label>Secondary glow<input id="themeGlow" type="color"/></label></div><footer class="editor-footer"><button id="deleteCustomTheme" class="danger">Delete skin</button><button id="saveCustomTheme" class="primary solid">Save skin</button></footer></div></dialog>
   <dialog id="sectionEditor" class="modal editor-modal"><div class="settings-shell editor-shell"><header class="settings-header"><div><p class="eyebrow">ROOM EDITOR</p><h3 id="editorHeading">Edit room</h3></div><button id="closeSectionEditor" class="close-x">×</button></header><div class="editor-grid"><label>Button label<input id="secLabel"/></label><label>Emoji / icon<input id="secIcon" maxlength="8"/></label><label class="wide">Room title<input id="secTitle"/></label><label>Button subtitle<input id="secSubtitle"/></label><div class="wide upload-field"><span>Room background</span><div id="secBgPreview" class="mini-preview"></div><label class="upload-btn">Upload from computer<input id="secBgUpload" type="file" accept="image/*" hidden></label><button id="clearSecBg" class="small">Use theme color instead</button></div><label>Background opacity <input id="secOpacity" type="range" min="0" max="1" step="0.05"/></label><label>Overlay darkness <input id="secOverlay" type="range" min="0" max="0.95" step="0.05"/></label></div><div class="block-toolbar"><h4>Content blocks</h4><div><button class="small solidish" data-add-block="text">+ Text</button><button class="small solidish" data-add-block="image">+ Image</button><button class="small solidish" data-add-block="imageRow">+ Image Row</button><button class="small solidish" data-add-block="gallery">+ Gallery</button><button class="small solidish" data-add-block="quote">+ Quote</button></div></div><div id="blockEditorList" class="block-editor-list"></div><footer class="editor-footer"><button id="deleteSection" class="danger">Delete room</button><button id="saveSection" class="primary solid">Save room</button></footer></div></dialog>
-  <script src="perfect.js?v=20260818-1500"></script>
-  <script src="layout-controls.js?v=20260818-1500"></script>
-  <script src="media-layout-v3.js?v=20260818-1500"></script>
-  <script src="media-layout-v4.js?v=20260818-1500"></script>
-  <script src="row-fix.js?v=20260818-1500"></script>
-  <script src="landing-board.js?v=20260818-1500"></script>
-  <script src="hub-board.js?v=20260818-1500"></script>
+  <script src="perfect.js?v=20260818-1545"></script>
+  <script src="layout-controls.js?v=20260818-1545"></script>
+  <script src="media-layout-v3.js?v=20260818-1545"></script>
+  <script src="media-layout-v4.js?v=20260818-1545"></script>
+  <script src="typography-controls.js?v=20260818-1545"></script>
+  <script src="row-fix.js?v=20260818-1545"></script>
+  <script src="landing-board.js?v=20260818-1545"></script>
+  <script src="hub-board.js?v=20260818-1545"></script>
 </body>
 </html>
