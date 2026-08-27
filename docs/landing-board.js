@@ -1,7 +1,37 @@
 // Freeform landing-page photo board. Uses existing Supabase upload + draft/publish CMS.
 (function(){
-  const DEFAULT_BOARD={items:[]};
+  // Fast-start snapshot of the current published landing board.
+  // This lets the browser start loading the visible photos immediately instead of
+  // waiting for the Supabase content request first. Cloud data still replaces this
+  // as soon as it arrives, so the editor remains fully dynamic.
+  const FAST_START_ITEMS=[
+    {w:18.491521368754587,x:11.495417705020792,y:22.769384043660985,z:84,id:'landing-1786888948184-0',rot:-9,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888947483-88177738-29fb-4fbd-a1a0-a208bb71a047.jpg'},
+    {w:14.43535003363503,x:93.61961505091118,y:86.17335842370625,z:199,id:'landing-1786888949545-1',rot:-14,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888949284-e3afbacc-e343-4341-9a50-182a354e2f12.jpg'},
+    {w:16.112186439349927,x:8.642245238541156,y:61.070786872825614,z:164,id:'landing-1786888951260-2',rot:6,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888950677-6bd92179-01e6-4a82-ae96-9bd1f04ae09a.jpg'},
+    {w:18.06242690114359,x:30.244957851103834,y:17.026108554509133,z:118,id:'landing-1786888953513-3',rot:6,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888953133-014b1315-4595-4e46-ae80-99cfcede03cc.jpg'},
+    {w:19.271771037181992,x:85.22944894928754,y:57.14947118259404,z:198,id:'landing-1786888962114-8',rot:0,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888961735-5b317593-2dd7-4ee4-9408-213099a30fec.jpg'},
+    {w:11.538712294367661,x:24.76201807309503,y:52.693636481775904,z:128,id:'landing-1786888969295-12',rot:-11,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888968818-c465ddf9-2d94-44bf-ac0b-99ef90718f32.jpg'},
+    {w:17.339470850278254,x:73.81327685451319,y:22.03808073511225,z:197,id:'landing-1786888970611-13',rot:8,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786888970302-cea920c2-687f-45ed-9350-a347da12f36a.jpg'},
+    {w:12.78966425169704,x:19.352019009524824,y:80.75740246690856,z:181,id:'landing-1786889459276-0',rot:-1,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786889458620-f52d95e4-e2d5-4886-956d-4eb5c13a8973.jpg'},
+    {w:15.832296651403496,x:50.048501091227365,y:92.84848661478718,z:185,id:'landing-1786889461708-1',rot:0,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786889461357-3d020fa6-6963-4e66-93f6-dd9d603cc0ff.jpg'},
+    {w:12.079046618915118,x:92.87790496288682,y:24.67237135025956,z:173,id:'landing-1786889462892-2',rot:-7,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786889462619-62497dfe-0a53-4df2-8c35-8888ea017414.jpg'},
+    {w:13.242739802470645,x:75.52119663783482,y:85.33000412368855,z:200,id:'landing-1786889737916-0',rot:10,url:'https://ddpctbzxgiilncumkyje.supabase.co/storage/v1/object/public/wonderland-media/uploads/1786889737197-0df7f8e9-4ab4-4f76-9c78-a743d8a89449.jpg'}
+  ];
+  const DEFAULT_BOARD={items:FAST_START_ITEMS.map(x=>({...x}))};
   let selectedId=null;
+
+  function warmLandingImages(){
+    if(document.querySelector('link[data-landing-preconnect]')) return;
+    const pre=document.createElement('link');
+    pre.rel='preconnect';pre.href='https://ddpctbzxgiilncumkyje.supabase.co';pre.crossOrigin='anonymous';pre.dataset.landingPreconnect='1';
+    document.head.appendChild(pre);
+    FAST_START_ITEMS.forEach((it,i)=>{
+      const img=new Image();
+      img.decoding='async';
+      img.fetchPriority=i<5?'high':'auto';
+      img.src=it.url;
+    });
+  }
 
   function boardData(){
     if(!data.landingBoard || !Array.isArray(data.landingBoard.items)) data.landingBoard=JSON.parse(JSON.stringify(DEFAULT_BOARD));
@@ -25,7 +55,7 @@
   function renderLandingBoard(){
     const layer=ensurePublicLayer(); if(!layer) return;
     const items=boardData().items;
-    layer.innerHTML=items.map(it=>`<figure class="landing-photo" style="left:${clamp(Number(it.x)||50,0,100)}%;top:${clamp(Number(it.y)||50,0,100)}%;width:${clamp(Number(it.w)||18,6,60)}%;transform:translate(-50%,-50%) rotate(${Number(it.rot)||0}deg);z-index:${Number(it.z)||1}"><img src="${safeUrl(it.url)}" alt="Personal photo"></figure>`).join('');
+    layer.innerHTML=items.map((it,i)=>`<figure class="landing-photo" style="left:${clamp(Number(it.x)||50,0,100)}%;top:${clamp(Number(it.y)||50,0,100)}%;width:${clamp(Number(it.w)||18,6,60)}%;transform:translate(-50%,-50%) rotate(${Number(it.rot)||0}deg);z-index:${Number(it.z)||1}"><img src="${safeUrl(it.url)}" alt="Personal photo" loading="eager" decoding="async" fetchpriority="${i<5?'high':'auto'}"></figure>`).join('');
   }
 
   function injectEditor(){
@@ -144,6 +174,7 @@
   const oldOpenSettings=openSettings;
   openSettings=function(){oldOpenSettings();injectEditor();renderBoardEditor();};
 
+  warmLandingImages();
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>{injectEditor();renderLandingBoard();});
   else {injectEditor();renderLandingBoard();}
 })();
