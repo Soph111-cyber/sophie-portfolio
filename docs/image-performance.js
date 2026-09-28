@@ -2,6 +2,12 @@
 // and upload future images as smaller WebP files.
 (function(){
   const STORAGE_ORIGIN='https://ddpctbzxgiilncumkyje.supabase.co';
+  // Keep the original URL in the CMS; request a display-sized image for visitors.
+  window.portfolioImageUrl=function(url,width=800){
+    if(typeof url!=='string'||!url.startsWith(STORAGE_ORIGIN+'/storage/v1/object/public/'))return url;
+    return url.replace('/storage/v1/object/public/','/storage/v1/render/image/public/')+
+      (url.includes('?')?'&':'?')+'width='+width+'&quality=75';
+  };
   const warmed=new Set();
   const warming=new Set();
 
@@ -41,7 +47,7 @@
     img.decoding='async';
     try{img.fetchPriority=priority}catch{}
     img.onload=img.onerror=()=>{warming.delete(url);warmed.add(url)};
-    img.src=url;
+    img.src=portfolioImageUrl(url,640);
   }
 
   function prefetchSection(section,all=false){
@@ -53,13 +59,6 @@
     }
   }
 
-  function idleWarmRooms(){
-    const sections=(typeof data!=='undefined'&&Array.isArray(data.sections))?data.sections:[];
-    const run=()=>sections.forEach((s,i)=>setTimeout(()=>prefetchSection(s,false),i*180));
-    if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:1200});
-    else setTimeout(run,350);
-  }
-
   function tuneImage(img){
     if(!(img instanceof HTMLImageElement))return;
     img.decoding='async';
@@ -69,10 +68,10 @@
       const i=pics.indexOf(img);
       img.fetchPriority=(i>=0&&i<4)?'high':'auto';
     }else if(img.closest('#exploreContent')){
-      // Current room: load the first visible images aggressively, then let the rest stream in.
+      // The first row appears immediately; defer the rest until the visitor scrolls.
       const pics=[...document.querySelectorAll('#exploreContent img')];
       const i=pics.indexOf(img);
-      if(i>=0&&i<6){img.loading='eager';img.fetchPriority=i<3?'high':'auto';}
+      if(i>=0&&i<3){img.loading='eager';img.fetchPriority='high';}
       else{img.loading='lazy';img.fetchPriority='auto';}
     }else if(img.closest('.content-block,.gallery,.image-row-block')){
       img.loading='lazy';img.fetchPriority='auto';
@@ -90,7 +89,7 @@
     cards.forEach((card,i)=>{
       if(card.dataset.prefetchBound)return;
       card.dataset.prefetchBound='1';
-      const warm=()=>prefetchSection(sections[i],true);
+      const warm=()=>prefetchSection(sections[i],false);
       card.addEventListener('pointerenter',warm,{passive:true});
       card.addEventListener('focus',warm,{passive:true});
       card.addEventListener('touchstart',warm,{passive:true,once:true});
@@ -105,7 +104,7 @@
   // Patch hub rendering so every freshly rendered card gets prefetch listeners.
   if(typeof renderHub==='function'){
     const oldRenderHub=renderHub;
-    renderHub=function(){oldRenderHub();bindRoomPrefetch();idleWarmRooms();};
+    renderHub=function(){oldRenderHub();bindRoomPrefetch();};
   }
 
   // Warm a room immediately before entering it, then prioritize its first screenful.
@@ -113,14 +112,24 @@
     const oldOpenSection=openSection;
     openSection=function(id){
       const section=(typeof data!=='undefined'&&Array.isArray(data.sections))?data.sections.find(s=>s.id===id):null;
-      prefetchSection(section,true);
+      // Only warm the first row, not every photograph in a long room.
+      prefetchSection(section,false);
       oldOpenSection(id);
       requestAnimationFrame(()=>tuneAll(document.getElementById('exploreContent')||document));
     };
   }
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{bindRoomPrefetch();idleWarmRooms();});
-  else{bindRoomPrefetch();idleWarmRooms();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindRoomPrefetch);
+  else bindRoomPrefetch();
+
+  // This wraps the base renderer; later media layout scripts wrap it again.
+  if(typeof blockHTML==='function'){
+    const baseBlockHTML=blockHTML;
+    blockHTML=function(block){
+      return baseBlockHTML(block).replace(/<img src="([^"]+)"/g,(_,url)=>
+        `<img loading="lazy" decoding="async" src="${portfolioImageUrl(url,800)}"`);
+    };
+  }
 
   // Override future CMS uploads with smaller WebP assets.
   window.compressFile=async function(file,max=1400,q=.74){
