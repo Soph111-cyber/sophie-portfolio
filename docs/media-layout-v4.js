@@ -18,13 +18,13 @@
 
   function imageRowHTML(b){
     const items=safeItems(b),perRow=clamp(b.perRow||b.columns||3,1,5),gap=clamp(b.gap||14,0,48),height=clamp(b.height||320,100,800),fit=b.fit==='contain'?'contain':'cover',fallback=100/perRow,groupWidth=clamp(b.groupWidth||100,20,100);
-    return `<figure class="content-block media-block-unit image-row-block v4-shared-row-caption" data-media-placement="new" style="--group-width:${groupWidth}%;--row-gap:${gap}px"><div class="v4-row-images">${items.map((it,i)=>{const w=clamp(it.width||fallback,10,100);return `<div class="image-row-item" style="--row-item-width:${w}%;--row-height:${height}px"><img src="${esc(it.url)}" alt="Image ${i+1}" style="object-fit:${fit}"></div>`}).join('')}</div>${captionHTML(sharedRowCaption(b),b.captionSize||13,'shared-row-caption')}</figure>`;
+    return `<figure class="content-block media-block-unit image-row-block v4-shared-row-caption" data-media-placement="new" style="--group-width:${groupWidth}%;--row-gap:${gap}px"><div class="v4-row-images">${items.map((it,i)=>{const w=clamp(it.width||fallback,10,100);return `<div class="image-row-item" style="--row-item-width:${w}%;--row-height:${height}px"><img loading="lazy" decoding="async" src="${esc(portfolioImageUrl(it.url,800))}" alt="Image ${i+1}" style="object-fit:${fit}"></div>`}).join('')}</div>${captionHTML(sharedRowCaption(b),b.captionSize||13,'shared-row-caption')}</figure>`;
   }
 
   window.blockHTML=function(b){
     if(b.type==='image'&&b.url){
       const width=clamp(b.width||100,20,100),groupWidth=clamp(b.groupWidth||100,20,100),align=['left','center','right'].includes(b.align)?b.align:'center',fixed=b.heightMode==='fixed',height=fixed?clamp(b.height||420,120,900):null;
-      return `<figure class="content-block media-block-unit block-image advanced-image ${esc(b.layout||'editorial')} align-${align} ${fixed?'fixed-height':''}" data-media-placement="${b.sameRow?'same':'new'}" style="--group-width:${groupWidth}%;--image-width:${width}%;${height?`--image-height:${height}px;`:''}"><img src="${esc(b.url)}" alt="Photo">${captionHTML(b.caption,b.captionSize||13,'single-caption')}</figure>`;
+      return `<figure class="content-block media-block-unit block-image advanced-image ${esc(b.layout||'editorial')} align-${align} ${fixed?'fixed-height':''}" data-media-placement="${b.sameRow?'same':'new'}" style="--group-width:${groupWidth}%;--image-width:${width}%;${height?`--image-height:${height}px;`:''}"><img loading="lazy" decoding="async" src="${esc(portfolioImageUrl(b.url,1400))}" alt="Photo">${captionHTML(b.caption,b.captionSize||13,'single-caption')}</figure>`;
     }
     if(b.type==='imageRow')return imageRowHTML(b);
     return prevBlockHTML?prevBlockHTML(b):'';
