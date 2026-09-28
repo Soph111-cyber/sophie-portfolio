@@ -3,10 +3,10 @@
 (function(){
   const STORAGE_ORIGIN='https://ddpctbzxgiilncumkyje.supabase.co';
   // Keep the original URL in the CMS; request a display-sized image for visitors.
-  window.portfolioImageUrl=function(url,width=800){
+  window.portfolioImageUrl=function(url,width=1000){
     if(typeof url!=='string'||!url.startsWith(STORAGE_ORIGIN+'/storage/v1/object/public/'))return url;
     return url.replace('/storage/v1/object/public/','/storage/v1/render/image/public/')+
-      (url.includes('?')?'&':'?')+'width='+width+'&quality=75';
+      (url.includes('?')?'&':'?')+'width='+width+'&quality=85';
   };
   const warmed=new Set();
   const warming=new Set();
@@ -47,7 +47,7 @@
     img.decoding='async';
     try{img.fetchPriority=priority}catch{}
     img.onload=img.onerror=()=>{warming.delete(url);warmed.add(url)};
-    img.src=portfolioImageUrl(url,640);
+    img.src=portfolioImageUrl(url,800);
   }
 
   function prefetchSection(section,all=false){
@@ -127,7 +127,7 @@
     const baseBlockHTML=blockHTML;
     blockHTML=function(block){
       return baseBlockHTML(block).replace(/<img src="([^"]+)"/g,(_,url)=>
-        `<img loading="lazy" decoding="async" src="${portfolioImageUrl(url,800)}"`);
+        `<img loading="lazy" decoding="async" src="${portfolioImageUrl(url,1000)}"`);
     };
   }
 
