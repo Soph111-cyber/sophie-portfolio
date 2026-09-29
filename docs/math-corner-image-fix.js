@@ -3,18 +3,6 @@
   const prevOpenSection = window.openSection;
   if (typeof prevOpenSection !== 'function') return;
 
-  function originalStorageUrl(src){
-    try{
-      const u=new URL(src,window.location.href);
-      if(u.pathname.includes('/storage/v1/render/image/public/')){
-        u.pathname=u.pathname.replace('/storage/v1/render/image/public/','/storage/v1/object/public/');
-        u.search='';
-        return u.toString();
-      }
-    }catch{}
-    return src;
-  }
-
   function forceFullImages(content){
     if(!content) return;
 
@@ -39,11 +27,8 @@
       el.style.setProperty('flex','none','important');
     });
 
-    // Use the original stored file, not Supabase's transformed render endpoint,
-    // then force the natural aspect ratio with no crop in either direction.
+    // Keep the existing, known-good image URL. Only change layout/cropping behavior.
     content.querySelectorAll('.image-row-item img, .gallery img, .advanced-image img, .block-image img').forEach(img=>{
-      const original=originalStorageUrl(img.currentSrc||img.src);
-      if(original && original!==img.src) img.src=original;
       img.removeAttribute('width');
       img.removeAttribute('height');
       img.style.setProperty('display','block','important');
@@ -55,6 +40,8 @@
       img.style.setProperty('object-fit','contain','important');
       img.style.setProperty('object-position','center center','important');
       img.style.setProperty('aspect-ratio','auto','important');
+      img.loading='eager';
+      try{img.fetchPriority='high'}catch{}
     });
   }
 
@@ -73,7 +60,6 @@
       forceFullImages(content);
       requestAnimationFrame(()=>forceFullImages(content));
       setTimeout(()=>forceFullImages(content),120);
-      setTimeout(()=>forceFullImages(content),500);
     }
   };
 })();
