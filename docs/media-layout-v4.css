@@ -53,3 +53,22 @@
   .v4-row-images>.image-row-item{flex-basis:100%!important}
   .explore.math-corner-full-images .v4-row-images{grid-template-columns:1fr!important}
 }
+
+/* Per-image full-frame mode: never crop images marked contain. */
+.v4-row-images>.image-row-item.natural-height-item{
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  align-self:flex-start!important;
+  aspect-ratio:auto!important;
+}
+.v4-row-images>.image-row-item.natural-height-item img{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  max-height:none!important;
+  min-height:0!important;
+  object-fit:contain!important;
+  object-position:center center!important;
+  aspect-ratio:auto!important;
+}
