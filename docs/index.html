@@ -17,6 +17,26 @@
   <link rel="stylesheet" href="typography-controls.css?v=20261008-1915">
   <link rel="stylesheet" href="landing-board.css?v=20261008-1915">
   <link rel="stylesheet" href="hub-board.css?v=20261008-1915">
+  <style id="portfolio-full-frame-photos">
+    /* Preserve the full original frame of content photos, without altering theme backgrounds. */
+    #exploreContent :is(.block-image, .advanced-image, .image-row-item, .gallery figure) {
+      height: auto !important;
+      max-height: none !important;
+      aspect-ratio: auto !important;
+      overflow: visible !important;
+    }
+    #exploreContent :is(.block-image, .advanced-image, .image-row-item, .gallery) img {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      min-height: 0 !important;
+      aspect-ratio: auto !important;
+      object-fit: contain !important;
+      object-position: center !important;
+    }
+  </style>
 </head>
 <body>
   <button id="settingsBtn" class="settings-btn" aria-label="Settings">⚙</button>
