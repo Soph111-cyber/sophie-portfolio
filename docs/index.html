@@ -59,9 +59,37 @@
   <script src="perfect.js?v=20261008-1915"></script>
   <script src="image-performance.js?v=20260929-1"></script>
   <script id="portfolio-original-photo-urls">
-    // Use exactly the same stored photo URL as the editor preview.
-    // The image transformation endpoint can crop the source before CSS sees it.
-    window.portfolioImageUrl = function(url) { return url; };
+    // Explicit contain in a square bounding box preserves the entire image.
+    // Original stored files remain untouched.
+    window.portfolioImageUrl = function(url,width=1200) {
+      if(typeof url!=='string')return url;
+      try {
+        const u=new URL(url);
+        if(u.origin!=='https://ddpctbzxgiilncumkyje.supabase.co'||!u.pathname.startsWith('/storage/v1/object/public/'))return url;
+        const size=Math.max(1,Math.min(1800,Number(width)||1200));
+        u.pathname=u.pathname.replace('/storage/v1/object/public/','/storage/v1/render/image/public/');
+        u.searchParams.set('width',size);
+        u.searchParams.set('height',size);
+        u.searchParams.set('resize','contain');
+        u.searchParams.set('quality','88');
+        return u.href.replace(/&/g,'&amp;');
+      }catch(e){return url;}
+    };
+    // URL generators are also used for prefetch via Image.src, so return raw URLs
+    // and let HTML parsers handle the query string.
+    const fullFrameUrl=window.portfolioImageUrl;
+    window.portfolioImageUrl=function(url,width){return fullFrameUrl(url,width).replaceAll('&amp;','&');};
+    document.addEventListener('error',function(e){
+      const img=e.target;
+      if(!(img instanceof HTMLImageElement))return;
+      try{
+        const u=new URL(img.src);
+        if(u.origin!=='https://ddpctbzxgiilncumkyje.supabase.co'||!u.pathname.startsWith('/storage/v1/render/image/public/'))return;
+        u.pathname=u.pathname.replace('/storage/v1/render/image/public/','/storage/v1/object/public/');
+        ['width','height','resize','quality','format'].forEach(k=>u.searchParams.delete(k));
+        img.src=u.href;
+      }catch(err){}
+    },true);
   </script>
   <script src="layout-controls.js?v=20261008-1915"></script>
   <script src="media-layout-v3.js?v=20261008-1915"></script>
